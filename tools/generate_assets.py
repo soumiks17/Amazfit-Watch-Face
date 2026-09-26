@@ -359,6 +359,27 @@ def hub(size, aod=False):
     return down(im, (size, size))
 
 
+# ---- tap feedback ---------------------------------------------------------
+ZONE_WINDOW = {"top": "top", "hr": "hr", "steps": "steps", "t2": "t2"}
+
+
+def press_overlay(name, zx, zy, zw, zh):
+    """Orange frame around the tapped window, drawn in zone coordinates."""
+    im = Image.new("RGBA", (zw * S, zh * S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    if name in ZONE_WINDOW:
+        x, y, w, h = LAYOUT["win"][ZONE_WINDOW[name]]
+        x, y = x - zx, y - zy
+        for grow, alpha, width in ((9, 60, 5), (6, 255, 3)):
+            d.polygon(scale(chamfer_rect(x - grow, y - grow, w + 2 * grow, h + 2 * grow, 10 + grow / 2)),
+                      outline=rgba(ACCENT, alpha), width=int(width * S))
+    else:
+        cx, cy = C - zx, C - zy
+        for r, alpha, width in ((24, 60, 5), (21, 255, 3)):
+            d.ellipse(scale([(cx - r, cy - r), (cx + r, cy + r)]), outline=rgba(ACCENT, alpha), width=int(width * S))
+    return down(im, (zw, zh))
+
+
 # ---- main ----------------------------------------------------------------
 def save(img, name):
     img.save(os.path.join(OUT, name), optimize=True)
@@ -406,8 +427,9 @@ def main():
     save(hub(LAYOUT["hub"]["size"], aod=True), "hub_aod.png")
 
     save(Image.new("RGBA", (4, 4), (0, 0, 0, 0)), "blank.png")
-    x, y, w, h = LAYOUT["t2_hit"]
-    save(Image.new("RGBA", (w, h), (0, 0, 0, 0)), "t2_hit.png")
+    for name, (zx, zy, zw, zh) in LAYOUT["zones"].items():
+        save(Image.new("RGBA", (zw, zh), (0, 0, 0, 0)), f"hit_{name}.png")
+        save(press_overlay(name, zx, zy, zw, zh), f"press_{name}.png")
 
     js = os.path.join(ROOT, "app", "watchface", "layout.js")
     with open(js, "w") as f:

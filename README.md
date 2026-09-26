@@ -14,6 +14,20 @@ Rampart is an open-source Zepp OS watch face. It pairs analog hands with negativ
 
 The always-on display keeps the hands (outlined) and the T2 window, dimmed.
 
+### Tap zones
+
+| Tap | Opens |
+|---|---|
+| Date / battery window | Calendar |
+| Heart-rate window | Heart Rate |
+| Steps window | Activity |
+| Centre (around the hands) | Alarms |
+| T2 window | **tap:** next city → … → UTC · **hold:** World Clock |
+
+Each zone is larger than the window it covers (fingertips are big on a 33 mm screen), and the window gets an orange frame while you're pressing it.
+
+![Tap zones](docs/tap_zones.png)
+
 ![Active and always-on](docs/preview_sheet.png)
 
 **Target:** Amazfit Active 2 **Round**: 466×466, Zepp OS 4.x, API level 3.0+. It won't fit the Active 2 *Square* (390×450) without a new layout.
@@ -78,7 +92,8 @@ docs/                      previews for README and the portal listing
 - Built on the modern `@zos/*` module API. The old `hmUI` / `hmSensor` globals don't exist on this runtime.
 - Heart rate uses `HeartRate.getLast()`. On a real watch, `getCurrent()` reads 0 unless a continuous measurement is running. Turn on heart-rate monitoring in the watch's health settings for regular updates.
 - `WorldClock` needs API level 3.0. The face reads each city's reported hour/minute and falls back to the zone offset.
-- **Not yet verified on hardware:** tap-to-cycle on the watch face layer, and `localStorage` persistence from a watch face. If either is unsupported, T2 stays on the first world clock (or UTC). Issues and PRs are welcome.
+- Tap zones are transparent `BUTTON` widgets (the pattern community Zepp OS faces use). App shortcuts use `launchApp({ appId: SYSTEM_APP_*, native: true })` from `@zos/router` (API 3.0). To change what a zone opens, edit `TAP_ACTIONS` at the top of `app/watchface/index.js`.
+- **Not yet verified on hardware:** app launching from the watch-face layer, and `localStorage` persistence. If a firmware refuses a jump, that tap does nothing rather than crashing the face. Issues and PRs are welcome.
 
 ## Credits
 

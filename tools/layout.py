@@ -50,8 +50,15 @@ LAYOUT = {
         "second": {"w": 16, "h": 226, "px": 8, "py": 184},
     },
     "hub": {"size": 30},
-    # Tap target for cycling the second time zone
-    "t2_hit": [146, 278, 174, 84],
+    # Tap zones (x, y, w, h). Bigger than the windows they cover: a
+    # fingertip is ~100 px on this 33 mm screen. Zones don't overlap.
+    "zones": {
+        "top": [120, 70, 226, 118],      # tap: Calendar
+        "hr": [16, 188, 150, 76],        # tap: Heart Rate
+        "steps": [300, 188, 150, 76],    # tap: Activity
+        "center": [170, 192, 126, 72],   # tap: Alarms
+        "t2": [120, 266, 226, 134],       # tap: next city   hold: World Clock
+    },
 }
 
 # Hour indices (clock hours) that get a lume block; 3 and 9 are replaced by

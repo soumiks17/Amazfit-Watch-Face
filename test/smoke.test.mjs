@@ -16,7 +16,7 @@ async function boot({ scene = 1, clocks = [{ cityCode: 'NYC', hour: 11, minute: 
   const widgets = []
   const mock = {
     ui: {
-      widget: { IMG: 'IMG', TEXT: 'TEXT', FILL_RECT: 'FILL_RECT', TIME_POINTER: 'TIME_POINTER', WIDGET_DELEGATE: 'WIDGET_DELEGATE' },
+      widget: { BUTTON: 'BUTTON', IMG: 'IMG', TEXT: 'TEXT', FILL_RECT: 'FILL_RECT', TIME_POINTER: 'TIME_POINTER', WIDGET_DELEGATE: 'WIDGET_DELEGATE' },
       prop: { MORE: 'MORE', SRC: 'SRC', TEXT: 'TEXT' },
       show_level: { ONLY_NORMAL: 1, ONAL_AOD: 2 },
       align: { LEFT: 0, CENTER_H: 16, RIGHT: 2 },
@@ -33,6 +33,7 @@ async function boot({ scene = 1, clocks = [{ cityCode: 'NYC', hour: 11, minute: 
     clocks,
     hourFormat,
     store: {},
+    launched: [],
   }
   globalThis.__zosMock = mock
   let face = null
@@ -50,8 +51,14 @@ async function boot({ scene = 1, clocks = [{ cityCode: 'NYC', hour: 11, minute: 
     export class HeartRate { getLast() { return 72 } getCurrent() { return 0 } onLastChange(f) {} }
     export class WorldClock { getCount() { return M.clocks.length } getInfo(i) { return M.clocks[i] } destroy() {} }
   `)
+  fs.writeFileSync(path.join(tmp, 'router.mjs'), `
+    const M = globalThis.__zosMock
+    export const SYSTEM_APP_HR = 102, SYSTEM_APP_STATUS = 101, SYSTEM_APP_CALENDAR = 120, SYSTEM_APP_ALARM = 105, SYSTEM_APP_WORLD_CLOCK = 117
+    export function launchApp(o) { M.launched.push(o) }
+    export function checkSystemApp() {}
+  `)
   let src = fs.readFileSync(path.join(WF, 'index.js'), 'utf8')
-  for (const mod of ['ui', 'app', 'sensor', 'storage']) src = src.replace(`'@zos/${mod}'`, `'${pathToFileURL(path.join(tmp, mod + '.mjs'))}'`)
+  for (const mod of ['ui', 'app', 'sensor', 'storage', 'router']) src = src.replace(`'@zos/${mod}'`, `'${pathToFileURL(path.join(tmp, mod + '.mjs'))}'`)
   src = src.replace("'./layout.js'", `'${pathToFileURL(path.join(WF, 'layout.js'))}'`)
   src = src.replace("'./logic.js'", `'${pathToFileURL(path.join(WF, 'logic.js'))}'`)
   const entry = path.join(tmp, 'index.mjs')
@@ -65,6 +72,10 @@ function srcs(widgets) {
   const out = []
   for (const w of widgets) for (const [k, v] of Object.entries(w.props)) if (typeof v === 'string' && v.endsWith('.png')) out.push(v)
   return out
+}
+
+function button(widgets, zone) {
+  return widgets.find((w) => w.type === 'BUTTON' && w.props.normal_src === `images/hit_${zone}.png`)
 }
 
 function t2State(widgets) {
@@ -85,10 +96,10 @@ test('T2 shows the first world clock and tapping cycles to the next, then UTC', 
   const get = t2State(widgets)
   assert.equal(get(198, 284), 'images/ch_N.png')
   assert.equal(get(190, 308), 'images/lg_1.png') // 11:25 -> ' 1' '1'
-  const hit = widgets.find((w) => w.props.src === 'images/t2_hit.png')
-  hit.listeners.CLICK_UP()
+  const hit = button(widgets, 't2')
+  hit.props.click_func()
   assert.equal(get(198, 284), 'images/ch_L.png')
-  hit.listeners.CLICK_UP()
+  hit.props.click_func()
   assert.equal(get(198, 284), 'images/ch_U.png') // UTC 15:25 -> 3:25 PM
   assert.equal(get(190, 308), 'images/lg_3.png')
   assert.equal(get(281, 286), 'images/pm.png')
@@ -112,4 +123,25 @@ test('AOD scene builds with dim sprites and no second hand', async () => {
   assert.equal(pointer.props.second_path, undefined)
   assert.ok(srcs(widgets).includes('images/aod_bg.png'))
   assert.ok(srcs(widgets).some((s) => s.startsWith('images/lga_')))
+})
+
+test('tap zones open the matching system apps; T2 hold opens World Clock', async () => {
+  const { widgets, mock } = await boot()
+  const expect = { top: 120, hr: 102, steps: 101, center: 105 }
+  for (const [zone, appId] of Object.entries(expect)) {
+    const b = button(widgets, zone)
+    assert.ok(b, `button for ${zone}`)
+    b.props.click_func()
+    assert.deepEqual(mock.launched.at(-1), { appId, native: true })
+  }
+  button(widgets, 't2').props.longpress_func()
+  assert.deepEqual(mock.launched.at(-1), { appId: 117, native: true })
+  // buttons sit above the hands
+  const iPointer = widgets.findIndex((w) => w.type === 'TIME_POINTER')
+  assert.ok(widgets.every((w, i) => w.type !== 'BUTTON' || i > iPointer))
+})
+
+test('AOD has no tap zones', async () => {
+  const { widgets } = await boot({ scene: 3 })
+  assert.equal(widgets.filter((w) => w.type === 'BUTTON').length, 0)
 })

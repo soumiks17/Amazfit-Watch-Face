@@ -5,7 +5,10 @@
 //   left   heart rate (last measurement)
 //   right  steps today
 //   bottom T2 - a second time zone. Tap it to cycle through the world
-//          clocks set up on the watch, then UTC.
+//          clocks set up on the watch, then UTC; hold it to open World Clock.
+//
+// Taps: date window -> Calendar, HR -> Heart Rate, steps -> Activity,
+// centre (hands) -> Alarms.
 //
 // This file is the only one that touches the platform. It uses the @zos/*
 // module API; the old hmUI / hmSensor globals do not exist on this runtime
@@ -15,6 +18,7 @@ import * as hmUI from '@zos/ui'
 import { getScene, SCENE_AOD } from '@zos/app'
 import * as sensor from '@zos/sensor'
 import { localStorage } from '@zos/storage'
+import * as router from '@zos/router'
 
 import { LAYOUT as L } from './layout.js'
 import {
@@ -34,6 +38,27 @@ import {
 const IMG = 'images/'
 const STORE_KEY = 'rampart_t2_index'
 const TIME_HOUR_FORMAT_12 = 0 // verified constant value on this runtime
+
+// What each tap zone does. Values are @zos/router SYSTEM_APP_* constant
+// names (API level 3.0); 'cycle' steps T2 to the next city.
+const TAP_ACTIONS = {
+  top: { tap: 'SYSTEM_APP_CALENDAR' },
+  hr: { tap: 'SYSTEM_APP_HR' },
+  steps: { tap: 'SYSTEM_APP_STATUS' },
+  center: { tap: 'SYSTEM_APP_ALARM' },
+  t2: { tap: 'cycle', hold: 'SYSTEM_APP_WORLD_CLOCK' },
+}
+
+// Open a built-in app. Silently does nothing if this firmware doesn't know
+// the app or doesn't allow the jump.
+function openSystemApp(constName) {
+  const appId = router[constName]
+  if (typeof appId !== 'number' || typeof router.launchApp !== 'function') return
+  try {
+    if (typeof router.checkSystemApp === 'function' && router.checkSystemApp({ appId }) === false) return
+    router.launchApp({ appId, native: true })
+  } catch (e) {}
+}
 
 // ---- defensive helpers: an uncaught throw in build() = black screen -------
 function make(Ctor) {
@@ -231,23 +256,34 @@ WatchFace({
 
     refreshAll()
 
-    // Tap the T2 window to cycle world clocks -> UTC. Created last so it
-    // sits above the hands; the image itself is fully transparent.
+    // ---- tap zones ------------------------------------------------------------
+    // Transparent BUTTONs created last so they sit above the hands. The
+    // press image draws an orange frame around the window while touched.
     if (!isAod) {
-      try {
-        const hit = hmUI.createWidget(hmUI.widget.IMG, {
-          x: L.t2_hit[0], y: L.t2_hit[1], w: L.t2_hit[2], h: L.t2_hit[3],
-          src: IMG + 't2_hit.png',
+      const cycleT2 = () => {
+        const count = num(world, 'getCount') || 0
+        t2Index = nextIndex(t2Index, count)
+        saveIndex(t2Index)
+        renderT2()
+      }
+      for (const [name, action] of Object.entries(TAP_ACTIONS)) {
+        const zone = L.zones[name]
+        if (!zone) continue
+        const params = {
+          x: zone[0], y: zone[1], w: zone[2], h: zone[3],
+          text: '',
+          normal_src: IMG + 'hit_' + name + '.png',
+          press_src: IMG + 'press_' + name + '.png',
           show_level: level,
-        })
-        hit.addEventListener(hmUI.event.CLICK_UP, () => {
-          const count = num(world, 'getCount') || 0
-          t2Index = nextIndex(t2Index, count)
-          saveIndex(t2Index)
-          renderT2()
-        })
-      } catch (e) {
-        // no touch events on this firmware: T2 stays on the saved choice
+        }
+        if (action.tap === 'cycle') params.click_func = cycleT2
+        else if (action.tap) params.click_func = () => openSystemApp(action.tap)
+        if (action.hold) params.longpress_func = () => openSystemApp(action.hold)
+        try {
+          hmUI.createWidget(hmUI.widget.BUTTON, params)
+        } catch (e) {
+          // a zone that can't be created just isn't tappable
+        }
       }
     }
 

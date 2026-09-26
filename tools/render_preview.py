@@ -113,6 +113,43 @@ def on_card(face, pad=24, bg=(18, 19, 21)):
     return card
 
 
+TAP_LABELS = {
+    "top": ["TAP: CALENDAR"],
+    "hr": ["TAP:", "HEART RATE"],
+    "steps": ["TAP:", "ACTIVITY"],
+    "center": ["TAP: ALARMS"],
+    "t2": ["TAP: NEXT CITY", "HOLD: WORLD CLOCK"],
+}
+
+
+def tap_map(face):
+    """README figure: the face with its tap zones, plus one pressed state."""
+    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf", 13)
+    dim = Image.new("RGBA", face.size, (0, 0, 0, 150))
+    left = face.copy()
+    left.alpha_composite(dim)
+    ov = Image.new("RGBA", face.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(ov)
+    for name, (x, y, w, h) in LAYOUT["zones"].items():
+        d.rectangle([x, y, x + w - 1, y + h - 1], fill=(255, 98, 28, 40), outline=(255, 98, 28, 255), width=2)
+        lines = TAP_LABELS[name]
+        for i, line in enumerate(lines):
+            yy = y + h / 2 + (i - (len(lines) - 1) / 2) * 16
+            d.text((x + w / 2, yy), line, font=font, fill=(255, 255, 255, 255), anchor="mm", stroke_width=3, stroke_fill=(0, 0, 0, 255))
+    left.alpha_composite(ov)
+    pressed = face.copy()
+    x, y, w, h = LAYOUT["zones"]["hr"]
+    pressed.alpha_composite(sprite("press_hr.png"), (x, y))
+    sheet = Image.new("RGB", (2 * (SCREEN + 48), SCREEN + 90), (18, 19, 21))
+    sheet.paste(on_card(left).convert("RGB"), (0, 0))
+    sheet.paste(on_card(pressed).convert("RGB"), (SCREEN + 48, 0))
+    dd = ImageDraw.Draw(sheet)
+    f2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf", 20)
+    dd.text(((SCREEN + 48) // 2, SCREEN + 60), "TAP ZONES", fill=(180, 186, 190), font=f2, anchor="mm")
+    dd.text((SCREEN + 48 + (SCREEN + 48) // 2, SCREEN + 60), "PRESSED (HR)", fill=(180, 186, 190), font=f2, anchor="mm")
+    sheet.save(os.path.join(DOCS, "tap_zones.png"))
+
+
 BASE = dict(weekday=6, day=26, battery=78, hr=72, steps=8432, city="NYC",
             t2=(11, 25), h12=True, time=(10, 10, 32))
 
@@ -150,6 +187,7 @@ def main():
     d.text(((SCREEN + 48) // 2, SCREEN + 60), "ACTIVE", fill=(180, 186, 190), font=font, anchor="mm")
     d.text((SCREEN + 48 + (SCREEN + 48) // 2, SCREEN + 60), "ALWAYS-ON", fill=(180, 186, 190), font=font, anchor="mm")
     sheet.save(os.path.join(DOCS, "preview_sheet.png"))
+    tap_map(face)
     print("previews written to", DOCS)
 
 
