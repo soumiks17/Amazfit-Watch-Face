@@ -35,13 +35,18 @@ def right_aligned(value, slots, blank_leading=True):
     return [None] * (slots - len(s)) + list(s)
 
 
-def hand(canvas, name, spec, angle):
+def hand(canvas, name, spec, angle, cx=C, cy=C):
     im = sprite(name)
     pad = max(im.width, im.height) * 2
     big = Image.new("RGBA", (pad, pad), (0, 0, 0, 0))
     big.alpha_composite(im, (pad // 2 - spec["px"], pad // 2 - spec["py"]))
     big = big.rotate(-angle, resample=Image.BICUBIC, center=(pad // 2, pad // 2))
-    canvas.alpha_composite(big, (C - pad // 2, C - pad // 2))
+    canvas.alpha_composite(big, (cx - pad // 2, cy - pad // 2))
+
+
+def gauge(v, lo, hi):
+    t = max(0.0, min(1.0, (v - lo) / (hi - lo)))
+    return -135 + 270 * t
 
 
 def render(state, aod=False):
@@ -54,26 +59,31 @@ def render(state, aod=False):
         for (x, y), ch in zip(L["weekday"], wd):
             put(cv, f"ch_{ch}.png", (x, y))
         for (x, y), ch in zip(L["day"], f"{state['day']:02d}"):
-            put(cv, f"sm_{ch}.png", (x, y))
-        put(cv, f"batt_{min(10, (state['battery'] + 9) // 10)}.png", L["batt"])
+            put(cv, f"md_{ch}.png", (x, y))
+        put(cv, f"batt_{min(10, (state['battery'] + 9) // 10)}.png", L["batt_arc"][:2])
+        for (x, y), ch in zip(L["batt_pct"], right_aligned(state["battery"], 3)):
+            if ch is not None:
+                put(cv, f"sm_{ch}.png", (x, y))
         hr = state["hr"]
-        digits = ["dash", "dash"] if hr is None else right_aligned(hr, 3)
-        if hr is None:
-            digits = [None, "dash", "dash"]
+        digits = [None, "dash", "dash"] if hr is None else right_aligned(hr, 3)
         for (x, y), ch in zip(L["hr"], digits):
             if ch is not None:
                 put(cv, f"sm_{ch}.png", (x, y))
         for (x, y), ch in zip(L["steps"], right_aligned(state["steps"], 5)):
             if ch is not None:
                 put(cv, f"sm_{ch}.png", (x, y))
+        cx, cy = L["subdials"]["hr"]
+        hand(cv, "needle_hr.png", L["needle"], gauge(hr or 0, 40, 200), cx, cy)
+        cx, cy = L["subdials"]["steps"]
+        hand(cv, "needle_steps.png", L["needle"], gauge(state["steps"] / 100, 0, 100), cx, cy)
 
-    # T2
+    # T2 LCD
     h, m = state["t2"]
     ampm = None
     if state["h12"]:
         ampm = "am" if h < 12 else "pm"
-        h = h % 12 or 12
-        hs = f"{h:2d}"
+        h12 = h % 12 or 12
+        hs = f"{h12:2d}"
     else:
         hs = f"{h:02d}"
     for (x, y), ch in zip(L["t2_digits"], hs + f"{m:02d}"):
@@ -85,21 +95,23 @@ def render(state, aod=False):
     if ampm:
         put(cv, f"{ampm}{sfx}.png", L["t2_ampm"])
 
-    # hands
+    # GMT hand (24h) under the main hands
+    th, tm = state["t2"]
+    hand(cv, "hand_gmt_aod.png" if aod else "hand_gmt.png", L["gmt"], (th * 60 + tm) / 1440 * 360)
+
     hh, mm, ss = state["time"]
     hands = L["hands"]
     ha = (hh % 12) * 30 + mm * 0.5
     ma = mm * 6 + ss * 0.1
+    hs_ = L["hub"]["size"]
     if aod:
         hand(cv, "hand_h_aod.png", hands["hour"], ha)
         hand(cv, "hand_m_aod.png", hands["minute"], ma)
-        hs_ = L["hub"]["size"]
         put(cv, "hub_aod.png", (C - hs_ // 2, C - hs_ // 2))
     else:
         hand(cv, "hand_h.png", hands["hour"], ha)
         hand(cv, "hand_m.png", hands["minute"], ma)
         hand(cv, "hand_s.png", hands["second"], ss * 6)
-        hs_ = L["hub"]["size"]
         put(cv, "hub.png", (C - hs_ // 2, C - hs_ // 2))
     return cv
 
@@ -114,11 +126,11 @@ def on_card(face, pad=24, bg=(18, 19, 21)):
 
 
 TAP_LABELS = {
-    "top": ["TAP: CALENDAR"],
+    "date": ["TAP:", "CALENDAR"],
     "hr": ["TAP:", "HEART RATE"],
     "steps": ["TAP:", "ACTIVITY"],
-    "center": ["TAP: ALARMS"],
-    "t2": ["TAP: NEXT CITY", "HOLD: WORLD CLOCK"],
+    "center": ["TAP:", "ALARMS"],
+    "lcd": ["TAP: NEXT", "HOLD: PREV", "CITY"],
 }
 
 
@@ -151,7 +163,7 @@ def tap_map(face):
 
 
 BASE = dict(weekday=6, day=26, battery=78, hr=72, steps=8432, city="NYC",
-            t2=(11, 25), h12=True, time=(10, 10, 32))
+            t2=(11, 10), h12=True, time=(10, 10, 32))
 
 
 def main():
@@ -166,14 +178,12 @@ def main():
     icon.save(os.path.join(ROOT, "app", "assets", "active-2-round", "icon.png"))
 
     # animated preview: second hand sweeps while T2 cycles world clocks
-    cities = [("NYC", -1), ("LON", 4), ("TYO", 13), ("UTC", 4)]
+    cities = [("NYC", (11, 10)), ("LON", (16, 10)), ("BOM", (20, 40)), ("TYO", (0, 10))]
     frames = []
     for i in range(40):
         sec = (32 + i) % 60
-        city, off = cities[(i // 10) % 4]
-        local_h, local_m = 10, 10 + (32 + i) // 60
-        th = (local_h + 1 + off) % 24 if city != "NYC" else 11
-        st = dict(BASE, time=(local_h, local_m, sec), city=city, t2=(th, 25), hr=72 + (i // 13), steps=8432 + i * 3)
+        city, t2 = cities[(i // 10) % 4]
+        st = dict(BASE, time=(10, 10, sec), city=city, t2=t2, hr=72 + (i // 8) * 6, steps=8432 + i * 3)
         frames.append(on_card(render(st)).convert("P", palette=Image.ADAPTIVE, colors=255))
     frames[0].save(os.path.join(DOCS, "preview.gif"), save_all=True, append_images=frames[1:], duration=250, loop=0, optimize=True)
 

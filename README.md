@@ -1,34 +1,30 @@
-# Rampart: a rugged ana-digi watch face for the Amazfit Active 2 (Round)
+# Rampart GMT: an ana-digi chronograph face for the Amazfit Active 2 (Round)
 
-![Rampart preview](docs/preview.gif)
+![Rampart GMT preview](docs/preview.gif)
 
-Rampart is an open-source Zepp OS watch face. It pairs analog hands with negative-display LCD windows and shows a **second time zone** as its main digital readout.
+Rampart GMT is an open-source Zepp OS watch face: three subdials, a 24-hour GMT bezel and hand, and an LCD window for a **second time zone (T2)**.
 
-| Window | Shows |
-|---|---|
-| Hands | Local time (hour, minute, sweeping second hand) |
-| **T2** (bottom) | Second time zone: city code + HH:MM, with AM/PM when the watch is set to 12-hour time. **Tap it** to cycle through the world clocks on your watch, then UTC. Your choice is remembered. |
-| Top | Weekday, day of month, 10-segment battery bar (turns orange at 20% or less) |
-| Left | Heart rate: the last measurement, `--` until the sensor has one |
-| Right | Steps today |
+| Element | Shows | Tap |
+|---|---|---|
+| Hands | Local time with a sweeping second hand | Centre: **Alarms** |
+| Teal arrow + 24h bezel | T2 on a 24-hour scale (night half of the bezel is darker) | |
+| Right LCD | T2: city code, HH:MM, AM/PM in 12-hour mode | **Tap:** next city · **Hold:** previous city |
+| Top subdial | Weekday, day of month, battery ring + % (ring turns orange at 20% or less) | **Calendar** |
+| Left subdial | Heart-rate gauge (40–200 bpm) + last reading, `--` until there is one | **Heart Rate** |
+| Bottom subdial | Step-goal gauge (% of your goal) + steps today | **Activity** |
 
-The always-on display keeps the hands (outlined) and the T2 window, dimmed.
+The always-on display keeps outlined hands, the GMT hand and a dimmed T2 window. Each tap zone is larger than what it covers, since fingertips are big on a 33 mm screen. While you press, it gets an orange ring or frame.
 
-### Tap zones
-
-| Tap | Opens |
-|---|---|
-| Date / battery window | Calendar |
-| Heart-rate window | Heart Rate |
-| Steps window | Activity |
-| Centre (around the hands) | Alarms |
-| T2 window | **tap:** next city → … → UTC · **hold:** World Clock |
-
-Each zone is larger than the window it covers (fingertips are big on a 33 mm screen), and the window gets an orange frame while you're pressing it.
+![Active and always-on](docs/preview_sheet.png)
 
 ![Tap zones](docs/tap_zones.png)
 
-![Active and always-on](docs/preview_sheet.png)
+### T2 cities
+Tapping the LCD steps through:
+1. the **World Clock** cities set up on your watch (if any), then
+2. 23 built-in cities, including their daylight-saving rules: HNL ANC LAX PHX DEN CHI NYC SAO **UTC** LON PAR ATH MOW DXB KHI BOM DAC BKK SIN HKG TYO SYD AKL.
+
+Your choice is remembered. With nothing saved, T2 starts on your first watch world clock, or on UTC if there are none. The built-in DST rules (US, EU, Australia, NZ) are checked in the tests against the real time-zone database for 2025–2030.
 
 **Target:** Amazfit Active 2 **Round**: 466×466, Zepp OS 4.x, API level 3.0+. It won't fit the Active 2 *Square* (390×450) without a new layout.
 
@@ -36,11 +32,8 @@ Each zone is larger than the window it covers (fingertips are big on a 33 mm scr
 
 ## Install (users)
 
-- **From amazfitwatchfaces.com:** download it from the Rampart page and install it with the AmazFaces app, or however the page describes.
+- **From amazfitwatchfaces.com:** download it from the Rampart GMT page and install it with the AmazFaces app, or however the page describes.
 - **From GitHub:** download the latest file from [Releases](../../releases), or build it yourself (below).
-
-### Setting up T2
-T2 reads the **World Clock** cities configured on your watch or in the Zepp app. If none are set, it shows **UTC**. Tap the T2 window to step through your cities and then UTC.
 
 ---
 
@@ -91,9 +84,10 @@ docs/                      previews for README and the portal listing
 
 - Built on the modern `@zos/*` module API. The old `hmUI` / `hmSensor` globals don't exist on this runtime.
 - Heart rate uses `HeartRate.getLast()`. On a real watch, `getCurrent()` reads 0 unless a continuous measurement is running. Turn on heart-rate monitoring in the watch's health settings for regular updates.
-- `WorldClock` needs API level 3.0. The face reads each city's reported hour/minute and falls back to the zone offset.
+- `WorldClock` (API 3.0) is created, read and released on every refresh. A sensor created once at startup can hold an empty snapshot, which is how v1 got stuck on UTC. Both the current (`getCount`/`getInfo`) and legacy (`init`/`getWorldClock*`) method names are tried.
+- Subdial needles and the GMT hand are rotating `IMG` widgets (`center_x/center_y` + `angle`). The main hands use `TIME_POINTER`.
 - Tap zones are transparent `BUTTON` widgets (the pattern community Zepp OS faces use). App shortcuts use `launchApp({ appId: SYSTEM_APP_*, native: true })` from `@zos/router` (API 3.0). To change what a zone opens, edit `TAP_ACTIONS` at the top of `app/watchface/index.js`.
-- **Not yet verified on hardware:** app launching from the watch-face layer, and `localStorage` persistence. If a firmware refuses a jump, that tap does nothing rather than crashing the face. Issues and PRs are welcome.
+- If a firmware refuses an app jump, that tap does nothing rather than crashing the face. Issues and PRs are welcome.
 
 ## Credits
 

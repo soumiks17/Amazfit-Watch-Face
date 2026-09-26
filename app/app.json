@@ -2,15 +2,15 @@
   "configVersion": "v2",
   "app": {
     "appId": 1096417,
-    "appName": "Rampart",
+    "appName": "Rampart GMT",
     "appType": "watchface",
     "version": {
-      "code": 1,
-      "name": "1.0.0"
+      "code": 2,
+      "name": "2.0.0"
     },
     "icon": "icon.png",
     "vender": "soumiks17",
-    "description": "Rugged ana-digi watch face with a second time zone (T2), heart rate, steps, date and battery"
+    "description": "Ana-digi chronograph face with GMT hand, T2 world time, heart-rate and step subdials, date and battery"
   },
   "permissions": [
     "data:user.hd.step",
@@ -72,7 +72,7 @@
   },
   "i18n": {
     "en-US": {
-      "appName": "Rampart"
+      "appName": "Rampart GMT"
     }
   },
   "defaultLanguage": "en-US"

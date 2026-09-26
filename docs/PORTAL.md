@@ -4,23 +4,22 @@
 **File:** the build output from `app/dist/` (see README). If the upload form doesn't accept that extension, check its list of allowed types first.
 **Preview:** `docs/preview.gif` (animated, which the rules prefer). `docs/preview_card.png` is a static backup.
 
-**Name:** Rampart Ana-Digi T2
+**Name:** Rampart GMT Ana-Digi
 
-**Tags:** analog, digital, hybrid, ana-digi, rugged, sport, tactical, military, outdoor, lcd, dual time, world time, second time zone, gmt, utc, heart rate, steps, battery, date, shortcuts, tap to open, black, orange, dark, aod, open source
+**Tags:** analog, digital, hybrid, ana-digi, chronograph, subdials, gmt, dual time, world time, second time zone, 24 hour bezel, utc, heart rate, steps, battery, date, shortcuts, tap to open, sport, tactical, outdoor, lcd, black, orange, teal, dark, aod, open source
 
 **Description:**
 
-Rampart is a rugged ana-digi face with a second time zone as its main digital readout.
+Rampart GMT is an ana-digi chronograph-style face built around a second time zone.
 
 - Analog hands for local time, with a sweeping orange second hand
-- T2 window: second time zone with a 3-letter city code and AM/PM in 12-hour mode. Tap it to cycle through the World Clock cities set up on your watch, then UTC.
-- Top window: weekday, date, and a 10-segment battery bar (orange at 20% or less)
-- Heart rate (last measurement) and steps today in the side windows
-- Tap shortcuts: date → Calendar, heart rate → Heart Rate, steps → Activity, centre → Alarms, T2 hold → World Clock
-- Negative LCD windows with ghost segments, lume hands, and a bolted bezel
-- Always-on display: outlined hands and a dimmed T2 window
+- GMT hand on a two-tone 24-hour bezel showing T2
+- T2 LCD with city code, time and AM/PM. Tap for the next city, hold for the previous one. It uses your watch's World Clock cities plus 23 built-in cities with automatic daylight-saving time.
+- Top subdial: weekday, date, battery ring and %
+- Left subdial: heart-rate gauge and reading
+- Bottom subdial: step-goal gauge and steps today
+- Tap shortcuts: date → Calendar, heart rate → Heart Rate, steps → Activity, centre → Alarms, with orange press feedback
+- Always-on display: outlined hands, GMT hand and a dimmed T2 display
 - Original artwork. Free and open source (MIT): github.com/soumiks17/rampart-watchface
 
-T2 setup: add cities in World Clock on the watch or in the Zepp app. With none set, T2 shows UTC.
-
-v1.0.0: first release.
+v2.0.0: new chronograph layout with GMT hand. T2 now works without any world clocks set up on the watch.

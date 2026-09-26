@@ -1,8 +1,8 @@
 {
   "name": "rampart-watchface",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Rampart - rugged ana-digi watch face for Amazfit Active 2 (Round) with a second time zone",
+  "description": "Rampart GMT - ana-digi chronograph watch face for Amazfit Active 2 (Round) with a GMT hand and second time zone",
   "license": "MIT",
   "scripts": {
     "test": "node --test test/logic.test.mjs test/smoke.test.mjs",

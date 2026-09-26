@@ -10,58 +10,63 @@ SCREEN = 466
 C = SCREEN // 2  # 233
 
 # Sprite sizes (w, h). Glyph widths include the italic slant.
-LG = {"w": 33, "h": 48}      # large 7-seg (T2 time)
-SM = {"w": 18, "h": 28}      # small 7-seg (date, HR, steps)
-CH = {"w": 16, "h": 20}      # 14-seg letters (weekday, city code)
-AMPM = {"w": 34, "h": 16}
-COLON = {"w": 12, "h": 48}
-BATT = {"w": 133, "h": 8}
+LG = {"w": 26, "h": 38}      # T2 time digits (LCD)
+MD = {"w": 21, "h": 30}      # day of month
+SM = {"w": 14, "h": 20}      # HR, steps, battery %
+CH = {"w": 13, "h": 16}      # 14-seg letters (weekday, city code)
+AMPM = {"w": 28, "h": 12}
+COLON = {"w": 9, "h": 38}
+
+SUB_R = 56                   # subdial radius
+SUBDIALS = {
+    "date": [C, 125],        # top: weekday, day, battery ring
+    "hr": [125, C],          # left: heart-rate gauge
+    "steps": [C, 341],       # bottom: steps-goal gauge
+}
 
 LAYOUT = {
     "screen": SCREEN,
     "center": C,
-    "sizes": {"lg": LG, "sm": SM, "ch": CH, "ampm": AMPM, "colon": COLON, "batt": BATT},
-    # LCD windows: x, y, w, h (chamfered rectangles in bg.png)
-    "win": {
-        "top": [160, 112, 146, 58],
-        "t2": [146, 278, 174, 84],
-        "hr": [48, 211, 106, 44],
-        "steps": [312, 211, 106, 44],
-    },
-    # Top window: weekday + day of month + battery bar
-    "weekday": [[170, 126], [188, 126], [206, 126]],
-    "day": [[254, 118], [275, 118]],
-    "batt": [170, 154],
-    # Heart-rate window: three small digits, right-aligned
-    "hr": [[82, 219], [102, 219], [122, 219]],
-    "heart_icon": [58, 225, 18, 16],
-    # Steps window: five small digits, right-aligned
-    "steps": [[321, 219], [339, 219], [357, 219], [375, 219], [393, 219]],
-    # T2 window: city code letters, AM/PM flag, HH:MM
-    "t2_tag": [156, 284],
-    "t2_city": [[198, 284], [216, 284], [234, 284]],
-    "t2_ampm": [281, 286],
-    "t2_digits": [[153, 308], [190, 308], [243, 308], [280, 308]],
-    "t2_colon": [227, 308],
-    # Hands: image size and pivot inside the image (posX/posY)
+    "sizes": {"lg": LG, "md": MD, "sm": SM, "ch": CH, "ampm": AMPM, "colon": COLON},
+    "sub_r": SUB_R,
+    "subdials": SUBDIALS,
+    # T2 LCD window at 3 o'clock: x, y, w, h
+    "lcd": [292, 196, 128, 76],
+    "t2_tag": [300, 204],
+    "t2_city": [[329, 204], [343, 204], [357, 204]],
+    "t2_ampm": [384, 206],
+    "t2_digits": [[298, 226], [323, 226], [358, 226], [383, 226]],
+    "t2_colon": [349, 226],
+    # Top subdial: weekday, day, battery %
+    "weekday": [[212, 84], [226, 84], [240, 84]],
+    "day": [[212, 104], [233, 104]],
+    "batt_pct": [[211, 142], [224, 142], [237, 142]],
+    "batt_arc": [C - 54, 125 - 54, 108, 108],   # ring overlay box (r 49.5-53.5)
+    # Left subdial: heart rate digits
+    "hr": [[104, 250], [118, 250], [132, 250]],
+    # Bottom subdial: steps digits
+    "steps": [[199, 358], [212, 358], [225, 358], [238, 358], [251, 358]],
+    # Needles (rotating IMG): image size + pivot in the image
+    "needle": {"w": 12, "h": 60, "px": 6, "py": 48},
+    "gmt": {"w": 20, "h": 226, "px": 10, "py": 208},
+    # Main hands
     "hands": {
         "hour": {"w": 26, "h": 132, "px": 13, "py": 110},
-        "minute": {"w": 20, "h": 186, "px": 10, "py": 164},
-        "second": {"w": 16, "h": 226, "px": 8, "py": 184},
+        "minute": {"w": 20, "h": 190, "px": 10, "py": 170},
+        "second": {"w": 16, "h": 232, "px": 8, "py": 190},
     },
     "hub": {"size": 30},
-    # Tap zones (x, y, w, h). Bigger than the windows they cover: a
-    # fingertip is ~100 px on this 33 mm screen. Zones don't overlap.
+    # Tap zones (x, y, w, h). Bigger than what they cover: a fingertip is
+    # ~100 px on this 33 mm screen. Zones don't overlap.
     "zones": {
-        "top": [120, 70, 226, 118],      # tap: Calendar
-        "hr": [16, 188, 150, 76],        # tap: Heart Rate
-        "steps": [300, 188, 150, 76],    # tap: Activity
-        "center": [170, 192, 126, 72],   # tap: Alarms
-        "t2": [120, 266, 226, 134],       # tap: next city   hold: World Clock
+        "date": [178, 58, 110, 122],     # tap: Calendar
+        "hr": [18, 174, 160, 118],       # tap: Heart Rate
+        "center": [178, 180, 110, 106],  # tap: Alarms
+        "lcd": [288, 186, 160, 106],     # tap: next city   hold: previous city
+        "steps": [178, 286, 110, 122],   # tap: Activity
     },
 }
 
-# Hour indices (clock hours) that get a lume block; 3 and 9 are replaced by
-# the HR / STEPS windows.
-INDEX_HOURS = [1, 2, 4, 5, 6, 7, 8, 10, 11]
-INDEX_R = (164, 188)
+# Hour indices; 12/3/6/9 are taken by the subdials and the LCD.
+INDEX_HOURS = [1, 2, 4, 5, 7, 8, 10, 11]
+INDEX_R = (168, 194)

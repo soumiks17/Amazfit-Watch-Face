@@ -1,14 +1,16 @@
-// Rampart - rugged ana-digi watch face for Amazfit Active 2 (Round)
+// Rampart GMT - ana-digi chronograph-style watch face for Amazfit Active 2 (Round)
 //
-// Analog hands show local time. The LCD windows show:
-//   top    weekday, day of month, battery bar
-//   left   heart rate (last measurement)
-//   right  steps today
-//   bottom T2 - a second time zone. Tap it to cycle through the world
-//          clocks set up on the watch, then UTC; hold it to open World Clock.
+//   hands        local time
+//   teal arrow   GMT hand: T2 on the 24-hour bezel
+//   top dial     weekday, day of month, battery ring + %      tap: Calendar
+//   left dial    heart rate gauge + digits                    tap: Heart Rate
+//   bottom dial  steps-goal gauge + steps today               tap: Activity
+//   right LCD    T2: city code + digital time                 tap: next city, hold: previous
+//   centre                                                    tap: Alarms
 //
-// Taps: date window -> Calendar, HR -> Heart Rate, steps -> Activity,
-// centre (hands) -> Alarms.
+// T2 choices = the watch's own World Clock cities (if any) followed by 23
+// built-in cities with their daylight-saving rules, so T2 works even when
+// nothing is set up on the watch.
 //
 // This file is the only one that touches the platform. It uses the @zos/*
 // module API; the old hmUI / hmSensor globals do not exist on this runtime
@@ -23,30 +25,33 @@ import * as router from '@zos/router'
 import { LAYOUT as L } from './layout.js'
 import {
   WEEKDAYS,
+  digitsRight,
   hrDigits,
   stepDigits,
   batteryFrame,
   pad2,
-  hmAt,
-  worldClockHM,
-  cityCode,
+  gaugeAngle,
+  gmtAngle,
+  t2Sources,
+  sourceHM,
+  findSource,
+  stepIndex,
   t2Digits,
-  nextIndex,
-  clampIndex,
 } from './logic.js'
 
 const IMG = 'images/'
-const STORE_KEY = 'rampart_t2_index'
+const STORE_KEY = 'rampart_t2_key'
 const TIME_HOUR_FORMAT_12 = 0 // verified constant value on this runtime
+const DEFAULT_STEP_GOAL = 10000
 
-// What each tap zone does. Values are @zos/router SYSTEM_APP_* constant
-// names (API level 3.0); 'cycle' steps T2 to the next city.
+// What each tap zone does: a @zos/router SYSTEM_APP_* constant name
+// (API level 3.0), or 'next' / 'prev' to step T2 through the cities.
 const TAP_ACTIONS = {
-  top: { tap: 'SYSTEM_APP_CALENDAR' },
+  date: { tap: 'SYSTEM_APP_CALENDAR' },
   hr: { tap: 'SYSTEM_APP_HR' },
   steps: { tap: 'SYSTEM_APP_STATUS' },
   center: { tap: 'SYSTEM_APP_ALARM' },
-  t2: { tap: 'cycle', hold: 'SYSTEM_APP_WORLD_CLOCK' },
+  lcd: { tap: 'next', hold: 'prev' },
 }
 
 // Open a built-in app. Silently does nothing if this firmware doesn't know
@@ -94,26 +99,44 @@ function readHeartRate(hr) {
   return cur !== null && cur > 0 ? cur : null
 }
 
-function loadIndex() {
+// Read the watch's World Clock list fresh every time. Creating the sensor
+// once in build() can leave it with an empty snapshot (T2 stuck on UTC),
+// so it's created, read and released on each refresh. Tries both the
+// current (getCount/getInfo) and the legacy (init/getWorldClock*) names.
+function readWorldClocks() {
+  const wc = make(sensor.WorldClock)
+  if (!wc) return []
+  call(wc, 'init')
+  let n = num(wc, 'getCount')
+  if (n === null) n = num(wc, 'getWorldClockCount')
+  const out = []
+  for (let i = 0; i < (n || 0) && i < 20; i++) {
+    let info = call(wc, 'getInfo', i)
+    if (!info) info = call(wc, 'getWorldClockInfo', i)
+    if (info && typeof info === 'object') out.push(info)
+  }
+  call(wc, 'uninit')
+  call(wc, 'destroy')
+  return out
+}
+
+function loadKey() {
   try {
     const v = localStorage.getItem(STORE_KEY)
-    const n = parseInt(v, 10)
-    return isNaN(n) ? 0 : n
+    return typeof v === 'string' ? v : null
   } catch (e) {
-    return 0
+    return null
   }
 }
 
-function saveIndex(i) {
+function saveKey(k) {
   try {
-    localStorage.setItem(STORE_KEY, String(i))
-  } catch (e) {
-    // storage unavailable: selection just won't survive a face reload
-  }
+    localStorage.setItem(STORE_KEY, k)
+  } catch (e) {}
 }
 
-// A sprite slot: an IMG widget whose picture changes. Geometry is kept so
-// every update sets x/y/w/h/src together (the update path verified on the
+// A sprite slot: an IMG whose picture changes. Geometry is kept so every
+// update sets x/y/w/h/src together (the update path verified on the
 // Active 2 runtime).
 function slot(x, y, w, h, level) {
   const widget = hmUI.createWidget(hmUI.widget.IMG, {
@@ -132,6 +155,28 @@ function slot(x, y, w, h, level) {
   }
 }
 
+// A rotating image (subdial needle, GMT hand) pivoting at (cx, cy).
+function rotor(cx, cy, spec, src, level) {
+  const widget = hmUI.createWidget(hmUI.widget.IMG, {
+    x: 0, y: 0, w: L.screen, h: L.screen,
+    pos_x: cx - spec.px,
+    pos_y: cy - spec.py,
+    center_x: cx,
+    center_y: cy,
+    src: IMG + src,
+    angle: 0,
+    show_level: level,
+  })
+  let current = 0
+  return {
+    set(angle) {
+      if (angle === current) return
+      current = angle
+      widget.setProperty(hmUI.prop.ANGLE, angle)
+    },
+  }
+}
+
 WatchFace({
   build() {
     const isAod = getScene() === SCENE_AOD
@@ -144,7 +189,6 @@ WatchFace({
     const battery = isAod ? null : make(sensor.Battery)
     const step = isAod ? null : make(sensor.Step)
     const heart = isAod ? null : make(sensor.HeartRate)
-    const world = make(sensor.WorldClock)
 
     // ---- static background ------------------------------------------------
     hmUI.createWidget(hmUI.widget.IMG, {
@@ -153,7 +197,7 @@ WatchFace({
       show_level: level,
     })
 
-    // ---- live LCD slots -----------------------------------------------------
+    // ---- T2 LCD -------------------------------------------------------------
     const t2Digit = L.t2_digits.map(([x, y]) => slot(x, y, S.lg.w, S.lg.h, level))
     const t2City = L.t2_city.map(([x, y]) => slot(x, y, S.ch.w, S.ch.h, level))
     const t2AmPm = slot(L.t2_ampm[0], L.t2_ampm[1], S.ampm.w, S.ampm.h, level)
@@ -163,20 +207,33 @@ WatchFace({
       show_level: level,
     })
 
+    // ---- subdials (normal screen only) --------------------------------------
     let weekday = []
     let day = []
-    let batt = null
+    let battPct = []
+    let battRing = null
     let hrSlots = []
     let stepSlots = []
+    let hrNeedle = null
+    let stepNeedle = null
     if (!isAod) {
       weekday = L.weekday.map(([x, y]) => slot(x, y, S.ch.w, S.ch.h, level))
-      day = L.day.map(([x, y]) => slot(x, y, S.sm.w, S.sm.h, level))
-      batt = slot(L.batt[0], L.batt[1], S.batt.w, S.batt.h, level)
+      day = L.day.map(([x, y]) => slot(x, y, S.md.w, S.md.h, level))
+      battPct = L.batt_pct.map(([x, y]) => slot(x, y, S.sm.w, S.sm.h, level))
+      const b = L.batt_arc
+      battRing = slot(b[0], b[1], b[2], b[3], level)
       hrSlots = L.hr.map(([x, y]) => slot(x, y, S.sm.w, S.sm.h, level))
       stepSlots = L.steps.map(([x, y]) => slot(x, y, S.sm.w, S.sm.h, level))
+      const hc = L.subdials.hr
+      const sc = L.subdials.steps
+      hrNeedle = rotor(hc[0], hc[1], L.needle, 'needle_hr.png', level)
+      stepNeedle = rotor(sc[0], sc[1], L.needle, 'needle_steps.png', level)
     }
 
-    // ---- hands --------------------------------------------------------------
+    // ---- GMT hand (under the main hands) ------------------------------------
+    const gmtHand = rotor(C, C, L.gmt, isAod ? 'hand_gmt_aod.png' : 'hand_gmt.png', level)
+
+    // ---- main hands -----------------------------------------------------------
     const H = L.hands
     const hub = L.hub.size
     const pointer = {
@@ -204,52 +261,59 @@ WatchFace({
     }
     hmUI.createWidget(hmUI.widget.TIME_POINTER, pointer)
 
-    // ---- T2: second time zone ----------------------------------------------
-    let t2Index = loadIndex()
+    // ---- T2 -------------------------------------------------------------------
+    let t2Key = loadKey()
 
-    function renderT2() {
+    function renderT2(dir) {
       let utcMs = num(time, 'getTime')
       if (utcMs === null) utcMs = Date.now()
-      const count = num(world, 'getCount') || 0
-      t2Index = clampIndex(t2Index, count)
-
-      let hm
-      let city
-      if (t2Index < count) {
-        const info = call(world, 'getInfo', t2Index)
-        hm = worldClockHM(info, utcMs)
-        city = cityCode(info)
-      } else {
-        hm = hmAt(utcMs, 0)
-        city = ['U', 'T', 'C']
+      const sources = t2Sources(readWorldClocks())
+      let i = findSource(sources, t2Key)
+      if (dir) {
+        i = stepIndex(i, sources.length, dir)
+        t2Key = sources[i].key
+        saveKey(t2Key)
       }
+      const src = sources[i]
+      const hm = sourceHM(src, utcMs)
 
       const is12h = num(time, 'getHourFormat') === TIME_HOUR_FORMAT_12
       const { digits, ampm } = t2Digits(hm.h, hm.m, is12h)
-      digits.forEach((d, i) => t2Digit[i].set(d === null ? null : `lg${sfx}_${d}.png`))
-      city.forEach((c, i) => t2City[i].set(c === null ? null : `ch${sfx}_${c}.png`))
+      digits.forEach((d, k) => t2Digit[k].set(d === null ? null : `lg${sfx}_${d}.png`))
+      src.letters.forEach((c, k) => t2City[k].set(c ? `ch${sfx}_${c}.png` : null))
       t2AmPm.set(ampm ? `${ampm}${sfx}.png` : null)
+      gmtHand.set(gmtAngle(hm.h, hm.m))
     }
 
-    // ---- everything else ----------------------------------------------------
+    // ---- date, battery, health -------------------------------------------------
     function renderDate() {
       if (isAod) return
       const wd = num(time, 'getDay') // 1..7, Monday first
       const name = wd >= 1 && wd <= 7 ? WEEKDAYS[wd - 1] : '   '
       weekday.forEach((s, i) => s.set(name[i] && name[i] !== ' ' ? `ch_${name[i]}.png` : null))
       const dd = pad2(num(time, 'getDate') || 0)
-      day.forEach((s, i) => s.set(`sm_${dd[i]}.png`))
-      batt.set(`batt_${batteryFrame(num(battery, 'getCurrent'))}.png`)
+      day.forEach((s, i) => s.set(`md_${dd[i]}.png`))
+      const pct = num(battery, 'getCurrent')
+      battRing.set(`batt_${batteryFrame(pct)}.png`)
+      const pd = pct === null ? [null, null, null] : digitsRight(Math.min(100, pct), 3)
+      battPct.forEach((s, i) => s.set(pd[i] === null ? null : `sm_${pd[i]}.png`))
     }
 
     function renderHealth() {
       if (isAod) return
-      hrDigits(readHeartRate(heart)).forEach((d, i) => hrSlots[i].set(d === null ? null : `sm_${d}.png`))
-      stepDigits(num(step, 'getCurrent')).forEach((d, i) => stepSlots[i].set(d === null ? null : `sm_${d}.png`))
+      const hr = readHeartRate(heart)
+      hrDigits(hr).forEach((d, i) => hrSlots[i].set(d === null ? null : `sm_${d}.png`))
+      hrNeedle.set(gaugeAngle(hr === null ? 40 : hr, 40, 200))
+
+      const steps = num(step, 'getCurrent')
+      stepDigits(steps).forEach((d, i) => stepSlots[i].set(d === null ? null : `sm_${d}.png`))
+      let goal = num(step, 'getTarget')
+      if (!(goal > 0)) goal = DEFAULT_STEP_GOAL
+      stepNeedle.set(gaugeAngle(steps === null ? 0 : (steps / goal) * 100, 0, 100))
     }
 
     function refreshAll() {
-      renderT2()
+      renderT2(0)
       renderDate()
       renderHealth()
     }
@@ -258,15 +322,15 @@ WatchFace({
 
     // ---- tap zones ------------------------------------------------------------
     // Transparent BUTTONs created last so they sit above the hands. The
-    // press image draws an orange frame around the window while touched.
+    // press image draws an orange frame / ring while touched.
     if (!isAod) {
-      const cycleT2 = () => {
-        const count = num(world, 'getCount') || 0
-        t2Index = nextIndex(t2Index, count)
-        saveIndex(t2Index)
-        renderT2()
+      const run = (what) => {
+        if (what === 'next') renderT2(1)
+        else if (what === 'prev') renderT2(-1)
+        else openSystemApp(what)
       }
-      for (const [name, action] of Object.entries(TAP_ACTIONS)) {
+      for (const name of Object.keys(TAP_ACTIONS)) {
+        const action = TAP_ACTIONS[name]
         const zone = L.zones[name]
         if (!zone) continue
         const params = {
@@ -276,24 +340,21 @@ WatchFace({
           press_src: IMG + 'press_' + name + '.png',
           show_level: level,
         }
-        if (action.tap === 'cycle') params.click_func = cycleT2
-        else if (action.tap) params.click_func = () => openSystemApp(action.tap)
-        if (action.hold) params.longpress_func = () => openSystemApp(action.hold)
+        if (action.tap) params.click_func = () => run(action.tap)
+        if (action.hold) params.longpress_func = () => run(action.hold)
         try {
           hmUI.createWidget(hmUI.widget.BUTTON, params)
-        } catch (e) {
-          // a zone that can't be created just isn't tappable
-        }
+        } catch (e) {}
       }
     }
 
-    // Minute tick drives the clock-ish things in both scenes.
+    // Minute tick: clocks, date, battery (both scenes).
     call(time, 'onPerMinute', () => {
-      renderT2()
+      renderT2(0)
       renderDate()
     })
 
-    // Health values move slowly; poll only while the face is visible.
+    // Health values: poll only while the face is visible.
     let timer = null
     hmUI.createWidget(hmUI.widget.WIDGET_DELEGATE, {
       resume_call: () => {
@@ -319,8 +380,6 @@ WatchFace({
     this._cleanup = () => {
       if (timer !== null) clearInterval(timer)
       call(time, 'offPerMinute')
-      call(world, 'destroy')
-      call(world, 'uninit')
     }
   },
 
