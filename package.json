@@ -1,0 +1,14 @@
+{
+  "name": "rampart-watchface",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Rampart - rugged ana-digi watch face for Amazfit Active 2 (Round) with a second time zone",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/logic.test.mjs test/smoke.test.mjs",
+    "assets": "python tools/generate_assets.py && python tools/render_preview.py",
+    "build": "cd app && zeus build",
+    "dev": "cd app && zeus dev",
+    "preview": "cd app && zeus preview"
+  }
+}

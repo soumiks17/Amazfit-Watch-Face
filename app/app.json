@@ -1,0 +1,79 @@
+{
+  "configVersion": "v2",
+  "app": {
+    "appId": 1096417,
+    "appName": "Rampart",
+    "appType": "watchface",
+    "version": {
+      "code": 1,
+      "name": "1.0.0"
+    },
+    "icon": "icon.png",
+    "vender": "soumiks17",
+    "description": "Rugged ana-digi watch face with a second time zone (T2), heart rate, steps, date and battery"
+  },
+  "permissions": [
+    "data:user.hd.step",
+    "data:user.hd.heart_rate"
+  ],
+  "runtime": {
+    "apiVersion": {
+      "compatible": "3.0.0",
+      "target": "3.0.0",
+      "minVersion": "3.0.0"
+    }
+  },
+  "targets": {
+    "active-2-round": {
+      "module": {
+        "watchface": {
+          "path": "watchface/index",
+          "main": 1,
+          "editable": 0,
+          "lockscreen": 0
+        }
+      },
+      "platforms": [
+        {
+          "name": "active-2-round",
+          "deviceSource": 8913152
+        },
+        {
+          "name": "active-2-round",
+          "deviceSource": 8913153
+        },
+        {
+          "name": "active-2-round",
+          "deviceSource": 8913155
+        },
+        {
+          "name": "active-2-round",
+          "deviceSource": 8913159
+        },
+        {
+          "name": "active-2-round",
+          "deviceSource": 10092800
+        },
+        {
+          "name": "active-2-round",
+          "deviceSource": 10092801
+        },
+        {
+          "name": "active-2-round",
+          "deviceSource": 10092803
+        },
+        {
+          "name": "active-2-round",
+          "deviceSource": 10092807
+        }
+      ],
+      "designWidth": 466
+    }
+  },
+  "i18n": {
+    "en-US": {
+      "appName": "Rampart"
+    }
+  },
+  "defaultLanguage": "en-US"
+}
