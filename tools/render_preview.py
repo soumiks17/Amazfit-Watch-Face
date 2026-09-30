@@ -75,7 +75,7 @@ def render(state, aod=False):
         cx, cy = L["subdials"]["hr"]
         hand(cv, "needle_hr.png", L["needle"], gauge(hr or 0, 40, 200), cx, cy)
         cx, cy = L["subdials"]["steps"]
-        hand(cv, "needle_steps.png", L["needle"], gauge(state["steps"] / 100, 0, 100), cx, cy)
+        hand(cv, "needle_steps.png", L["needle"], gauge(state["steps"], 0, 10000), cx, cy)
 
     # T2 LCD
     h, m = state["t2"]
@@ -92,7 +92,9 @@ def render(state, aod=False):
     put(cv, f"colon{sfx}.png", L["t2_colon"])
     for (x, y), ch in zip(L["t2_city"], state["city"][:3]):
         put(cv, f"ch{sfx}_{ch}.png", (x, y))
-    if ampm:
+    if state.get("fav") is not None:
+        put(cv, "fav_on.png" if state["fav"] else "fav_off.png", L["t2_ampm"])
+    elif ampm:
         put(cv, f"{ampm}{sfx}.png", L["t2_ampm"])
 
     # GMT hand (24h) under the main hands
@@ -130,7 +132,7 @@ TAP_LABELS = {
     "hr": ["TAP:", "HEART RATE"],
     "steps": ["TAP:", "ACTIVITY"],
     "center": ["TAP:", "ALARMS"],
-    "lcd": ["TAP: NEXT", "HOLD: PREV", "CITY"],
+    "lcd": ["TAP: NEXT CITY", "2x: WORLD CLOCK", "HOLD: PICK CITIES"],
 }
 
 
@@ -160,6 +162,19 @@ def tap_map(face):
     dd.text(((SCREEN + 48) // 2, SCREEN + 60), "TAP ZONES", fill=(180, 186, 190), font=f2, anchor="mm")
     dd.text((SCREEN + 48 + (SCREEN + 48) // 2, SCREEN + 60), "PRESSED (HR)", fill=(180, 186, 190), font=f2, anchor="mm")
     sheet.save(os.path.join(DOCS, "tap_zones.png"))
+
+
+def browse_strip():
+    """README figure: the T2 display while browsing cities."""
+    shots = [("KTM", (2, 10), False, "BROWSING: NOT A FAVOURITE"), ("KTM", (2, 10), True, "DOUBLE TAP: ADDED")]
+    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf", 13)
+    strip = Image.new("RGB", (2 * 300 + 20, 200 + 30), (18, 19, 21))
+    for i, (code, t2, fav, cap) in enumerate(shots):
+        face = render(dict(BASE, city=code, t2=t2, fav=fav, h12=False))
+        crop = face.crop((280, 185, 430, 285)).resize((300, 200), Image.LANCZOS)
+        strip.paste(crop.convert("RGB"), (i * 320, 0))
+        ImageDraw.Draw(strip).text((i * 320 + 150, 215), cap, fill=(180, 186, 190), font=font, anchor="mm")
+    strip.save(os.path.join(DOCS, "browse.png"))
 
 
 BASE = dict(weekday=6, day=26, battery=78, hr=72, steps=8432, city="NYC",
@@ -198,6 +213,7 @@ def main():
     d.text((SCREEN + 48 + (SCREEN + 48) // 2, SCREEN + 60), "ALWAYS-ON", fill=(180, 186, 190), font=font, anchor="mm")
     sheet.save(os.path.join(DOCS, "preview_sheet.png"))
     tap_map(face)
+    browse_strip()
     print("previews written to", DOCS)
 
 

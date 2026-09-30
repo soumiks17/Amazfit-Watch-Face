@@ -271,13 +271,14 @@ def build_bg():
     draw_heart(d, cx - 7, cy - 24, 14)
     label(d, "BPM", cx, 280, 8.5)
 
-    # --- bottom subdial: steps goal 0..100%
+    # --- bottom subdial: steps 0..10K (same units as the digits)
     cx, cy = SUBDIALS["steps"]
     arc_band(d, cx, cy, 50, 53, -135, 135, (30, 64, 70))
-    gauge_ticks(d, cx, cy, 20, 43, 49, 5)
-    for v, lab in ((25, "25"), (50, "50"), (75, "75")):
-        a = -135 + 270 * v / 100
-        label(d, lab, *polar(35, a, cx, cy), 8.5, (170, 176, 182))
+    gauge_ticks(d, cx, cy, 20, 43, 49, 4)          # minor = 500 steps, major = 2K
+    for v in (2, 4, 6, 8):
+        a = -135 + 270 * v / 10
+        label(d, f"{v}K", *polar(35, a, cx, cy), 8.5, (170, 176, 182))
+    label(d, "10K", *polar(62.5, 135, cx, cy), 7.5, (150, 156, 162))
     for x, y in LAYOUT["steps"]:
         draw_segments(d, sm_p, "abcdefg", sm_h, GHOST, x, y)
     label(d, "STEPS", cx, 385, 8.5)

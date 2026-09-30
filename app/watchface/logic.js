@@ -59,124 +59,126 @@ export function hmAt(utcMs, offsetMin) {
   return { h: Math.floor(day / 60), m: day % 60 }
 }
 
-function sundayOfMonth(year, month, n) {
-  // n >= 1: nth Sunday; n = -1: last Sunday. month is 0-based.
-  if (n > 0) {
-    const wd = new Date(Date.UTC(year, month, 1)).getUTCDay()
-    return 1 + ((7 - wd) % 7) + 7 * (n - 1)
-  }
+// Day of month of a weekday (0 = Sunday .. 6 = Saturday). month is 0-based.
+function nthWeekday(year, month, wd, n) {
+  const first = new Date(Date.UTC(year, month, 1)).getUTCDay()
+  return 1 + ((wd - first + 7) % 7) + 7 * (n - 1)
+}
+
+function lastWeekday(year, month, wd) {
   const last = new Date(Date.UTC(year, month + 1, 0))
-  return last.getUTCDate() - last.getUTCDay()
+  return last.getUTCDate() - ((last.getUTCDay() - wd + 7) % 7)
+}
+
+function weekdayOnOrAfter(year, month, day, wd) {
+  const d = new Date(Date.UTC(year, month, day)).getUTCDay()
+  return day + ((wd - d + 7) % 7)
 }
 
 // Is daylight saving in force at utcMs for a zone with standard offset
-// `off` (minutes) following `rule`?
+// `off` (minutes) following `rule`? Rules follow the IANA tz database.
 export function dstActive(rule, utcMs, off) {
   if (!rule) return false
   const y = new Date(utcMs).getUTCFullYear()
-  const at = (month, n, hour) => Date.UTC(y, month, sundayOfMonth(y, month, n), hour) - off * 60000
-  if (rule === 'US') return utcMs >= at(2, 2, 2) && utcMs < at(10, 1, 1)
+  const H = 3600000
+  // UTC instant of `hour` local standard time on a given day
+  const local = (month, day, hour, o) => Date.UTC(y, month, day, hour) - o * 60000
+  const SUN = 0
+  const THU = 4
+  const FRI = 5
+  if (rule === 'US') {
+    // 2nd Sunday of March 02:00 -> 1st Sunday of November 02:00 (01:00 standard)
+    return utcMs >= local(2, nthWeekday(y, 2, SUN, 2), 2, off) && utcMs < local(10, nthWeekday(y, 10, SUN, 1), 1, off)
+  }
   if (rule === 'EU') {
-    const start = Date.UTC(y, 2, sundayOfMonth(y, 2, -1), 1)
-    const end = Date.UTC(y, 9, sundayOfMonth(y, 9, -1), 1)
+    // last Sunday of March -> last Sunday of October, both 01:00 UTC
+    return utcMs >= Date.UTC(y, 2, lastWeekday(y, 2, SUN), 1) && utcMs < Date.UTC(y, 9, lastWeekday(y, 9, SUN), 1)
+  }
+  if (rule === 'AU') {
+    // 1st Sunday of October 02:00 -> 1st Sunday of April 03:00 (02:00 standard)
+    return utcMs >= local(9, nthWeekday(y, 9, SUN, 1), 2, off) || utcMs < local(3, nthWeekday(y, 3, SUN, 1), 2, off)
+  }
+  if (rule === 'NZ') {
+    // last Sunday of September -> 1st Sunday of April, 02:00 NZ standard
+    // (Chatham switches at the same instant)
+    return utcMs >= local(8, lastWeekday(y, 8, SUN), 2, 720) || utcMs < local(3, nthWeekday(y, 3, SUN, 1), 2, 720)
+  }
+  if (rule === 'CL') {
+    // Sunday on/after 2 September 04:00 UTC -> Sunday on/after 2 April 03:00 UTC
+    return utcMs >= Date.UTC(y, 8, weekdayOnOrAfter(y, 8, 2, SUN), 4) || utcMs < Date.UTC(y, 3, weekdayOnOrAfter(y, 3, 2, SUN), 3)
+  }
+  if (rule === 'IL') {
+    // Friday before the last Sunday of March 02:00 -> last Sunday of October 02:00 (daylight)
+    const start = local(2, lastWeekday(y, 2, SUN) - 2, 2, off)
+    const end = local(9, lastWeekday(y, 9, SUN), 2, off) - H
     return utcMs >= start && utcMs < end
   }
-  if (rule === 'AU') return utcMs >= at(9, 1, 2) || utcMs < at(3, 1, 2)
-  if (rule === 'NZ') return utcMs >= at(8, -1, 2) || utcMs < at(3, 1, 2)
+  if (rule === 'EG') {
+    // last Friday of April 00:00 -> last Thursday of October 24:00 (daylight)
+    const start = local(3, lastWeekday(y, 3, FRI), 0, off)
+    const end = local(9, lastWeekday(y, 9, THU), 24, off) - H
+    return utcMs >= start && utcMs < end
+  }
   return false
 }
 
-// Built-in cities, west to east. Offsets are standard time in minutes.
-// These make T2 work even when no world clocks are set up on the watch.
+// Built-in cities, west to east, one or more for every UTC offset in use.
+// `off` is standard time in minutes; `dst` names the daylight-saving rule.
 export const CITIES = [
-  { code: 'HNL', off: -600 },
-  { code: 'ANC', off: -540, dst: 'US' },
-  { code: 'LAX', off: -480, dst: 'US' },
-  { code: 'PHX', off: -420 },
-  { code: 'DEN', off: -420, dst: 'US' },
-  { code: 'CHI', off: -360, dst: 'US' },
-  { code: 'NYC', off: -300, dst: 'US' },
-  { code: 'SAO', off: -180 },
+  { code: 'PPG', off: -660 },              // Pago Pago
+  { code: 'HNL', off: -600 },              // Honolulu
+  { code: 'ANC', off: -540, dst: 'US' },   // Anchorage
+  { code: 'LAX', off: -480, dst: 'US' },   // Los Angeles
+  { code: 'PHX', off: -420 },              // Phoenix
+  { code: 'DEN', off: -420, dst: 'US' },   // Denver
+  { code: 'MEX', off: -360 },              // Mexico City
+  { code: 'CHI', off: -360, dst: 'US' },   // Chicago
+  { code: 'NYC', off: -300, dst: 'US' },   // New York
+  { code: 'SCL', off: -240, dst: 'CL' },   // Santiago
+  { code: 'YHZ', off: -240, dst: 'US' },   // Halifax
+  { code: 'YYT', off: -210, dst: 'US' },   // St. John's
+  { code: 'SAO', off: -180 },              // Sao Paulo
+  { code: 'FEN', off: -120 },              // Fernando de Noronha
+  { code: 'PDL', off: -60, dst: 'EU' },    // Azores
   { code: 'UTC', off: 0 },
-  { code: 'LON', off: 0, dst: 'EU' },
-  { code: 'PAR', off: 60, dst: 'EU' },
-  { code: 'ATH', off: 120, dst: 'EU' },
-  { code: 'MOW', off: 180 },
-  { code: 'DXB', off: 240 },
-  { code: 'KHI', off: 300 },
-  { code: 'BOM', off: 330 },
-  { code: 'DAC', off: 360 },
-  { code: 'BKK', off: 420 },
-  { code: 'SIN', off: 480 },
-  { code: 'HKG', off: 480 },
-  { code: 'TYO', off: 540 },
-  { code: 'SYD', off: 600, dst: 'AU' },
-  { code: 'AKL', off: 720, dst: 'NZ' },
+  { code: 'LON', off: 0, dst: 'EU' },      // London
+  { code: 'LOS', off: 60 },                // Lagos
+  { code: 'PAR', off: 60, dst: 'EU' },     // Paris
+  { code: 'JNB', off: 120 },               // Johannesburg
+  { code: 'CAI', off: 120, dst: 'EG' },    // Cairo
+  { code: 'ATH', off: 120, dst: 'EU' },    // Athens
+  { code: 'TLV', off: 120, dst: 'IL' },    // Tel Aviv
+  { code: 'IST', off: 180 },               // Istanbul
+  { code: 'MOW', off: 180 },               // Moscow
+  { code: 'THR', off: 210 },               // Tehran
+  { code: 'DXB', off: 240 },               // Dubai
+  { code: 'KBL', off: 270 },               // Kabul
+  { code: 'KHI', off: 300 },               // Karachi
+  { code: 'BOM', off: 330 },               // Mumbai
+  { code: 'KTM', off: 345 },               // Kathmandu
+  { code: 'DAC', off: 360 },               // Dhaka
+  { code: 'RGN', off: 390 },               // Yangon
+  { code: 'BKK', off: 420 },               // Bangkok
+  { code: 'SIN', off: 480 },               // Singapore
+  { code: 'HKG', off: 480 },               // Hong Kong
+  { code: 'TYO', off: 540 },               // Tokyo
+  { code: 'ADL', off: 570, dst: 'AU' },    // Adelaide
+  { code: 'BNE', off: 600 },               // Brisbane
+  { code: 'SYD', off: 600, dst: 'AU' },    // Sydney
+  { code: 'NOU', off: 660 },               // Noumea
+  { code: 'AKL', off: 720, dst: 'NZ' },    // Auckland
+  { code: 'CHT', off: 765, dst: 'NZ' },    // Chatham Islands
+  { code: 'TBU', off: 780 },               // Nuku'alofa
+  { code: 'CXI', off: 840 },               // Kiritimati
 ]
 
 export function cityHM(city, utcMs) {
   return hmAt(utcMs, city.off + (dstActive(city.dst, utcMs, city.off) ? 60 : 0))
 }
 
-// Three LCD letters for a city. Unsupported characters become blanks.
-export function cityCode(info) {
-  let raw = String((info && (info.cityCode || info.city)) || '')
-  try {
-    raw = raw.normalize('NFD').replace(/[̀-ͯ]/g, '') // São -> Sao
-  } catch (e) {}
-  raw = raw.toUpperCase().replace(/[^A-Z0-9]/g, '')
-  const code = raw.slice(0, 3)
-  const out = []
-  for (let i = 0; i < 3; i++) {
-    const ch = code[i]
-    out.push(ch && GLYPHS.indexOf(ch) >= 0 ? ch : null)
-  }
-  return out
-}
-
-// A watch world-clock entry -> { h, m }. The system's own hour/minute win;
-// the zone offset is only a fallback.
-export function worldClockHM(info, utcMs) {
-  if (info && typeof info.hour === 'number' && typeof info.minute === 'number') {
-    return { h: ((info.hour % 24) + 24) % 24, m: ((info.minute % 60) + 60) % 60 }
-  }
-  if (info && typeof info.timeZoneHour === 'number') {
-    const mins = typeof info.timeZoneMinute === 'number' ? info.timeZoneMinute : 0
-    const sign = info.timeZoneHour < 0 || mins < 0 ? -1 : 1
-    return hmAt(utcMs, sign * (Math.abs(info.timeZoneHour) * 60 + Math.abs(mins)))
-  }
-  return hmAt(utcMs, 0)
-}
-
-// The T2 choices, in tap order: the watch's own world clocks first, then
-// the built-in cities. Each has a stable key so the saved choice survives
-// the list changing.
-export function t2Sources(worldClocks) {
-  const out = []
-  ;(worldClocks || []).forEach((info, i) => {
-    const letters = cityCode(info)
-    out.push({ key: 'wc:' + i + ':' + letters.join(''), letters, info })
-  })
-  for (const c of CITIES) out.push({ key: c.code, letters: c.code.split(''), city: c })
-  return out
-}
-
-export function sourceHM(src, utcMs) {
-  return src.info ? worldClockHM(src.info, utcMs) : cityHM(src.city, utcMs)
-}
-
-// Index of the saved key; falls back to the first watch world clock if
-// there is one, else UTC.
-export function findSource(sources, key) {
-  for (let i = 0; i < sources.length; i++) if (sources[i].key === key) return i
-  if (key && key.indexOf('wc:') === 0) {
-    // same slot, city renamed / list reshuffled: match by slot number
-    const slot = key.split(':')[1]
-    for (let i = 0; i < sources.length; i++) if (sources[i].key.indexOf('wc:' + slot + ':') === 0) return i
-  }
-  if (sources.length && sources[0].info) return 0
-  for (let i = 0; i < sources.length; i++) if (sources[i].key === 'UTC') return i
-  return 0
+export function cityIndex(code) {
+  for (let i = 0; i < CITIES.length; i++) if (CITIES[i].code === code) return i
+  return -1
 }
 
 export function stepIndex(index, count, dir) {

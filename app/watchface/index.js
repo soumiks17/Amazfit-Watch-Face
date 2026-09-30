@@ -4,13 +4,14 @@
 //   teal arrow   GMT hand: T2 on the 24-hour bezel
 //   top dial     weekday, day of month, battery ring + %      tap: Calendar
 //   left dial    heart rate gauge + digits                    tap: Heart Rate
-//   bottom dial  steps-goal gauge + steps today               tap: Activity
-//   right LCD    T2: city code + digital time                 tap: next city, hold: previous
+//   bottom dial  steps gauge (0-10K) + steps today            tap: Activity
+//   right LCD    T2: city code + digital time                 tap: next city
+//                                                             double tap: World Clock app
 //   centre                                                    tap: Alarms
 //
-// T2 choices = the watch's own World Clock cities (if any) followed by 23
-// built-in cities with their daylight-saving rules, so T2 works even when
-// nothing is set up on the watch.
+// T2 steps through 45 built-in cities in order (every time zone in use,
+// with daylight-saving rules). A watch face can't read the World Clock
+// app's own city list - it keeps that in its private storage.
 //
 // This file is the only one that touches the platform. It uses the @zos/*
 // module API; the old hmUI / hmSensor globals do not exist on this runtime
@@ -32,26 +33,28 @@ import {
   pad2,
   gaugeAngle,
   gmtAngle,
-  t2Sources,
-  sourceHM,
-  findSource,
+  CITIES,
+  cityHM,
+  cityIndex,
   stepIndex,
   t2Digits,
 } from './logic.js'
 
 const IMG = 'images/'
-const STORE_KEY = 'rampart_t2_key'
+const STORE_KEY = 'rampart_t2_key' // code of the city T2 is showing
+const DEFAULT_CITY = 'UTC'
+const DOUBLE_TAP_MS = 350
 const TIME_HOUR_FORMAT_12 = 0 // verified constant value on this runtime
-const DEFAULT_STEP_GOAL = 10000
+const STEP_SCALE_MAX = 10000 // bottom dial reads 0 .. 10K steps, same units as the digits
 
 // What each tap zone does: a @zos/router SYSTEM_APP_* constant name
-// (API level 3.0), or 'next' / 'prev' to step T2 through the cities.
+// (API level 3.0), or one of the T2 gestures handled in build().
 const TAP_ACTIONS = {
   date: { tap: 'SYSTEM_APP_CALENDAR' },
   hr: { tap: 'SYSTEM_APP_HR' },
   steps: { tap: 'SYSTEM_APP_STATUS' },
   center: { tap: 'SYSTEM_APP_ALARM' },
-  lcd: { tap: 'next', hold: 'prev' },
+  lcd: { tap: 'next-city', doubletap: 'worldclock' },
 }
 
 // Open a built-in app. Silently does nothing if this firmware doesn't know
@@ -63,6 +66,33 @@ function openSystemApp(constName) {
     if (typeof router.checkSystemApp === 'function' && router.checkSystemApp({ appId }) === false) return
     router.launchApp({ appId, native: true })
   } catch (e) {}
+}
+
+// World Clock is not the same kind of app on every firmware. On newer Zepp
+// OS builds it's a preinstalled mini-app (appId 1049670, the target
+// community editors use for "World Time *"); older ones have it as a
+// native system app. Try the forms in order; returns true if a launch call
+// went through without throwing.
+const WORLD_CLOCK_APP = { appId: 1049670, url: 'page/wclk_showLayer' }
+
+function tryLaunch(opts) {
+  if (typeof router.launchApp !== 'function') return false
+  try {
+    router.launchApp(opts)
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+function openWorldClock() {
+  const sysId = router.SYSTEM_APP_WORLD_CLOCK
+  if (typeof sysId === 'number' && call(router, 'checkSystemApp', { appId: sysId }) === true) {
+    if (tryLaunch({ appId: sysId, native: true })) return true
+  }
+  if (tryLaunch(WORLD_CLOCK_APP)) return true
+  if (typeof sysId === 'number') return tryLaunch({ appId: sysId, native: true })
+  return false
 }
 
 // ---- defensive helpers: an uncaught throw in build() = black screen -------
@@ -99,39 +129,18 @@ function readHeartRate(hr) {
   return cur !== null && cur > 0 ? cur : null
 }
 
-// Read the watch's World Clock list fresh every time. Creating the sensor
-// once in build() can leave it with an empty snapshot (T2 stuck on UTC),
-// so it's created, read and released on each refresh. Tries both the
-// current (getCount/getInfo) and the legacy (init/getWorldClock*) names.
-function readWorldClocks() {
-  const wc = make(sensor.WorldClock)
-  if (!wc) return []
-  call(wc, 'init')
-  let n = num(wc, 'getCount')
-  if (n === null) n = num(wc, 'getWorldClockCount')
-  const out = []
-  for (let i = 0; i < (n || 0) && i < 20; i++) {
-    let info = call(wc, 'getInfo', i)
-    if (!info) info = call(wc, 'getWorldClockInfo', i)
-    if (info && typeof info === 'object') out.push(info)
-  }
-  call(wc, 'uninit')
-  call(wc, 'destroy')
-  return out
-}
-
-function loadKey() {
+function load(key) {
   try {
-    const v = localStorage.getItem(STORE_KEY)
+    const v = localStorage.getItem(key)
     return typeof v === 'string' ? v : null
   } catch (e) {
     return null
   }
 }
 
-function saveKey(k) {
+function save(key, value) {
   try {
-    localStorage.setItem(STORE_KEY, k)
+    localStorage.setItem(key, value)
   } catch (e) {}
 }
 
@@ -168,11 +177,17 @@ function rotor(cx, cy, spec, src, level) {
     show_level: level,
   })
   let current = 0
+  let shown = true
   return {
     set(angle) {
       if (angle === current) return
       current = angle
       widget.setProperty(hmUI.prop.ANGLE, angle)
+    },
+    show(on) {
+      if (on === shown) return
+      shown = on
+      widget.setProperty(hmUI.prop.VISIBLE, on)
     },
   }
 }
@@ -262,27 +277,28 @@ WatchFace({
     hmUI.createWidget(hmUI.widget.TIME_POINTER, pointer)
 
     // ---- T2 -------------------------------------------------------------------
-    let t2Key = loadKey()
+    let t2Index = cityIndex(load(STORE_KEY))
+    if (t2Index < 0) t2Index = cityIndex(DEFAULT_CITY)
+    let leftFace = false // set when the face goes off screen (an app opened)
 
-    function renderT2(dir) {
+    function renderT2() {
       let utcMs = num(time, 'getTime')
       if (utcMs === null) utcMs = Date.now()
-      const sources = t2Sources(readWorldClocks())
-      let i = findSource(sources, t2Key)
-      if (dir) {
-        i = stepIndex(i, sources.length, dir)
-        t2Key = sources[i].key
-        saveKey(t2Key)
-      }
-      const src = sources[i]
-      const hm = sourceHM(src, utcMs)
+      const city = CITIES[t2Index]
+      const hm = cityHM(city, utcMs)
 
       const is12h = num(time, 'getHourFormat') === TIME_HOUR_FORMAT_12
       const { digits, ampm } = t2Digits(hm.h, hm.m, is12h)
       digits.forEach((d, k) => t2Digit[k].set(d === null ? null : `lg${sfx}_${d}.png`))
-      src.letters.forEach((c, k) => t2City[k].set(c ? `ch${sfx}_${c}.png` : null))
+      city.code.split('').forEach((c, k) => t2City[k].set(`ch${sfx}_${c}.png`))
       t2AmPm.set(ampm ? `${ampm}${sfx}.png` : null)
       gmtHand.set(gmtAngle(hm.h, hm.m))
+    }
+
+    function nextCity() {
+      t2Index = stepIndex(t2Index, CITIES.length, 1)
+      save(STORE_KEY, CITIES[t2Index].code)
+      renderT2()
     }
 
     // ---- date, battery, health -------------------------------------------------
@@ -307,13 +323,11 @@ WatchFace({
 
       const steps = num(step, 'getCurrent')
       stepDigits(steps).forEach((d, i) => stepSlots[i].set(d === null ? null : `sm_${d}.png`))
-      let goal = num(step, 'getTarget')
-      if (!(goal > 0)) goal = DEFAULT_STEP_GOAL
-      stepNeedle.set(gaugeAngle(steps === null ? 0 : (steps / goal) * 100, 0, 100))
+      stepNeedle.set(gaugeAngle(steps === null ? 0 : steps, 0, STEP_SCALE_MAX))
     }
 
     function refreshAll() {
-      renderT2(0)
+      renderT2()
       renderDate()
       renderHealth()
     }
@@ -325,9 +339,16 @@ WatchFace({
     // press image draws an orange frame / ring while touched.
     if (!isAod) {
       const run = (what) => {
-        if (what === 'next') renderT2(1)
-        else if (what === 'prev') renderT2(-1)
-        else openSystemApp(what)
+        if (what === 'next-city') nextCity()
+        else if (what === 'worldclock') {
+          // If World Clock doesn't actually open (the face is still on
+          // screen a moment later), fall back to the next city so the
+          // gesture is never dead.
+          leftFace = false
+          const launched = openWorldClock()
+          if (!launched) nextCity()
+          else setTimeout(() => { if (!leftFace) nextCity() }, 1500)
+        } else openSystemApp(what)
       }
       for (const name of Object.keys(TAP_ACTIONS)) {
         const action = TAP_ACTIONS[name]
@@ -340,7 +361,23 @@ WatchFace({
           press_src: IMG + 'press_' + name + '.png',
           show_level: level,
         }
-        if (action.tap) params.click_func = () => run(action.tap)
+        if (action.doubletap) {
+          // One tap = action.tap, two quick taps = action.doubletap. The
+          // single tap waits briefly so a double tap doesn't also fire it.
+          let pending = null
+          params.click_func = () => {
+            if (pending !== null) {
+              clearTimeout(pending)
+              pending = null
+              run(action.doubletap)
+            } else {
+              pending = setTimeout(() => {
+                pending = null
+                run(action.tap)
+              }, DOUBLE_TAP_MS)
+            }
+          }
+        } else if (action.tap) params.click_func = () => run(action.tap)
         if (action.hold) params.longpress_func = () => run(action.hold)
         try {
           hmUI.createWidget(hmUI.widget.BUTTON, params)
@@ -350,7 +387,7 @@ WatchFace({
 
     // Minute tick: clocks, date, battery (both scenes).
     call(time, 'onPerMinute', () => {
-      renderT2(0)
+      renderT2()
       renderDate()
     })
 
@@ -358,10 +395,12 @@ WatchFace({
     let timer = null
     hmUI.createWidget(hmUI.widget.WIDGET_DELEGATE, {
       resume_call: () => {
+        leftFace = false
         refreshAll()
         if (!isAod && timer === null) timer = setInterval(renderHealth, 30000)
       },
       pause_call: () => {
+        leftFace = true
         if (timer !== null) {
           clearInterval(timer)
           timer = null

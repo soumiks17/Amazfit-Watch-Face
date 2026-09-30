@@ -1,6 +1,6 @@
 {
   "name": "rampart-watchface",
-  "version": "2.0.0",
+  "version": "2.3.0",
   "private": true,
   "description": "Rampart GMT - ana-digi chronograph watch face for Amazfit Active 2 (Round) with a GMT hand and second time zone",
   "license": "MIT",
@@ -9,6 +9,8 @@
     "assets": "python tools/generate_assets.py && python tools/render_preview.py",
     "build": "cd app && zeus build",
     "dev": "cd app && zeus dev",
-    "preview": "cd app && zeus preview"
+    "preview": "cd app && zeus preview",
+    "package": "python tools/package_portal.py",
+    "release": "npm run build && npm run package"
   }
 }
