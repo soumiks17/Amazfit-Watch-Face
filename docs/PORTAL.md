@@ -1,8 +1,9 @@
 # amazfitwatchfaces.com upload checklist
 
-**Device:** Amazfit Active 2 (Round)
-**File:** run `npm run release` and upload `release/Rampart_GMT_v<version>.zip`. The catalog doesn't take the `.zab` bundle; this is the watch-face package inside it (app.json + assets at the root), the same format community editors export.
-**Preview:** `docs/preview.gif` (animated, which the rules prefer). `docs/preview_card.png` is a static backup.
+**Device:** Amazfit Active 2 (Round). File: run `npm run release` and upload `release/Rampart_GMT_v<version>.zip`.
+**Device:** Amazfit Balance, as a separate upload in the Balance section. File: run `npm run release:balance` and upload `release/Rampart_GMT_Balance_v<version>.zip`.
+**Note:** The catalog doesn't take the `.zab` bundle; this is the watch-face package inside it (app.json + assets at the root), the same format community editors export.
+**Preview:** `docs/preview.gif` for Active 2 and `docs/balance/preview.gif` for Balance (animated, which the rules prefer). `preview_card.png` next to each is a static backup.
 
 **Name:** Rampart GMT Ana-Digi
 
@@ -22,6 +23,7 @@ Rampart GMT is an ana-digi chronograph-style face built around a second time zon
 - Always-on display: outlined hands, GMT hand and a dimmed T2 display
 - Original artwork. Free and open source (MIT): github.com/soumiks17/rampart-watchface
 
+v2.3.1: same as 2.3.0, re-released with a higher version number so watches replace older installs.
 v2.3.0: T2 steps through 45 built-in cities covering every time zone; double tap opens World Clock.
 v2.2.1: fix - your World Clock cities now load on the face (the watch delivers them a moment after the face starts).
 v2.2.0: T2 shows only your World Clock cities; tap = next city, double tap = open World Clock.

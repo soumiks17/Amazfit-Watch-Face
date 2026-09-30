@@ -9,8 +9,11 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const WF = path.join(ROOT, 'app', 'watchface')
-const ASSETS = path.join(ROOT, 'app', 'assets', 'active-2-round')
+// test/balance.test.mjs re-runs this whole file against the Balance project.
+const APP = process.env.RAMPART_APP || 'app'
+const TARGET = process.env.RAMPART_TARGET || 'active-2-round'
+const WF = path.join(ROOT, APP, 'watchface')
+const ASSETS = path.join(ROOT, APP, 'assets', TARGET)
 const L = JSON.parse(fs.readFileSync(path.join(WF, 'layout.js'), 'utf8').replace(/^[\s\S]*?export const LAYOUT = /, ''))
 
 // 2026-09-26 15:25 UTC (a Saturday)

@@ -35,7 +35,9 @@ def right_aligned(value, slots, blank_leading=True):
     return [None] * (slots - len(s)) + list(s)
 
 
-def hand(canvas, name, spec, angle, cx=C, cy=C):
+def hand(canvas, name, spec, angle, cx=None, cy=None):
+    cx = C if cx is None else cx
+    cy = C if cy is None else cy
     im = sprite(name)
     pad = max(im.width, im.height) * 2
     big = Image.new("RGBA", (pad, pad), (0, 0, 0, 0))
@@ -92,9 +94,7 @@ def render(state, aod=False):
     put(cv, f"colon{sfx}.png", L["t2_colon"])
     for (x, y), ch in zip(L["t2_city"], state["city"][:3]):
         put(cv, f"ch{sfx}_{ch}.png", (x, y))
-    if state.get("fav") is not None:
-        put(cv, "fav_on.png" if state["fav"] else "fav_off.png", L["t2_ampm"])
-    elif ampm:
+    if ampm:
         put(cv, f"{ampm}{sfx}.png", L["t2_ampm"])
 
     # GMT hand (24h) under the main hands
@@ -132,7 +132,7 @@ TAP_LABELS = {
     "hr": ["TAP:", "HEART RATE"],
     "steps": ["TAP:", "ACTIVITY"],
     "center": ["TAP:", "ALARMS"],
-    "lcd": ["TAP: NEXT CITY", "2x: WORLD CLOCK", "HOLD: PICK CITIES"],
+    "lcd": ["TAP: NEXT CITY", "2x TAP: WORLD", "CLOCK APP"],
 }
 
 
@@ -164,24 +164,19 @@ def tap_map(face):
     sheet.save(os.path.join(DOCS, "tap_zones.png"))
 
 
-def browse_strip():
-    """README figure: the T2 display while browsing cities."""
-    shots = [("KTM", (2, 10), False, "BROWSING: NOT A FAVOURITE"), ("KTM", (2, 10), True, "DOUBLE TAP: ADDED")]
-    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf", 13)
-    strip = Image.new("RGB", (2 * 300 + 20, 200 + 30), (18, 19, 21))
-    for i, (code, t2, fav, cap) in enumerate(shots):
-        face = render(dict(BASE, city=code, t2=t2, fav=fav, h12=False))
-        crop = face.crop((280, 185, 430, 285)).resize((300, 200), Image.LANCZOS)
-        strip.paste(crop.convert("RGB"), (i * 320, 0))
-        ImageDraw.Draw(strip).text((i * 320 + 150, 215), cap, fill=(180, 186, 190), font=font, anchor="mm")
-    strip.save(os.path.join(DOCS, "browse.png"))
-
-
 BASE = dict(weekday=6, day=26, battery=78, hr=72, steps=8432, city="NYC",
             t2=(11, 10), h12=True, time=(10, 10, 32))
 
 
-def main():
+def configure(img_dir, layout, docs_dir):
+    """Render another build (e.g. app-balance) from its own sprites and layout."""
+    global IMG, LAYOUT, SCREEN, C, DOCS
+    IMG, LAYOUT, DOCS = img_dir, layout, docs_dir
+    SCREEN, C = layout["screen"], layout["center"]
+    _cache.clear()
+
+
+def main(icon_path=os.path.join(ROOT, "app", "assets", "active-2-round", "icon.png"), figures=True):
     os.makedirs(DOCS, exist_ok=True)
     face = render(BASE)
     face.convert("RGB").save(os.path.join(DOCS, "preview.png"))
@@ -190,7 +185,7 @@ def main():
 
     # app icon shown in the watch's face picker
     icon = on_card(face, pad=0).resize((248, 248), Image.LANCZOS)
-    icon.save(os.path.join(ROOT, "app", "assets", "active-2-round", "icon.png"))
+    icon.save(icon_path)
 
     # animated preview: second hand sweeps while T2 cycles world clocks
     cities = [("NYC", (11, 10)), ("LON", (16, 10)), ("BOM", (20, 40)), ("TYO", (0, 10))]
@@ -201,6 +196,10 @@ def main():
         st = dict(BASE, time=(10, 10, sec), city=city, t2=t2, hr=72 + (i // 8) * 6, steps=8432 + i * 3)
         frames.append(on_card(render(st)).convert("P", palette=Image.ADAPTIVE, colors=255))
     frames[0].save(os.path.join(DOCS, "preview.gif"), save_all=True, append_images=frames[1:], duration=250, loop=0, optimize=True)
+
+    if not figures:
+        print("previews written to", DOCS)
+        return
 
     # side-by-side sheet for the README
     sheet = Image.new("RGB", (2 * (SCREEN + 48), SCREEN + 90), (18, 19, 21))
@@ -213,7 +212,6 @@ def main():
     d.text((SCREEN + 48 + (SCREEN + 48) // 2, SCREEN + 60), "ALWAYS-ON", fill=(180, 186, 190), font=font, anchor="mm")
     sheet.save(os.path.join(DOCS, "preview_sheet.png"))
     tap_map(face)
-    browse_strip()
     print("previews written to", DOCS)
 
 

@@ -1,7 +1,7 @@
 """Turn the zeus build (.zab) into the file amazfitwatchfaces.com wants.
 
     npm run build          # makes app/dist/*.zab
-    python tools/package_portal.py
+    python tools/package_portal.py [project-dir]     (default: app)
 
 A .zab is a bundle: a zip holding manifest.json + one .zpk per device, and
 each .zpk is a zip holding device.zip (+ app-side.zip). device.zip is the
@@ -55,11 +55,15 @@ def find_device_zip(data, path="bundle", depth=0):
 
 
 def main():
-    zabs = sorted(glob.glob(os.path.join(ROOT, "app", "dist", "*.zab")), key=os.path.getmtime)
-    if len(sys.argv) > 1:
-        zabs = [sys.argv[1]]
-    if not zabs:
-        sys.exit("No .zab found in app/dist - run `npm run build` first.")
+    arg = sys.argv[1] if len(sys.argv) > 1 else "app"
+    project = "app"
+    if arg.lower().endswith(".zab"):
+        zabs = [arg]
+    else:
+        project = arg
+        zabs = sorted(glob.glob(os.path.join(ROOT, project, "dist", "*.zab")), key=os.path.getmtime)
+        if not zabs:
+            sys.exit(f"No .zab found in {project}/dist - build that project first.")
     src = zabs[-1]
     with open(src, "rb") as f:
         dev, zpk = find_device_zip(f.read())
@@ -70,6 +74,12 @@ def main():
         app = json.loads(zf.read("app.json"))
     version = app.get("app", {}).get("version", {}).get("name", "0")
     name = app.get("app", {}).get("appName", "watchface").replace(" ", "_")
+    # Other device projects get their model in the file name
+    # (Rampart_GMT_Balance_v...), read from that project's own app.json.
+    if project != "app":
+        with open(os.path.join(ROOT, project, "app.json")) as f:
+            target = next(iter(json.load(f)["targets"]))
+        name += "_" + target.replace("-", " ").title().replace(" ", "_")
 
     out_dir = os.path.join(ROOT, "release")
     os.makedirs(out_dir, exist_ok=True)

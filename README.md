@@ -31,7 +31,11 @@ Missing a city? It's one line in `CITIES` in `app/watchface/logic.js`. Open an i
 
 **Why not the World Clock app's cities?** That app keeps its list in its own private storage, and Zepp OS doesn't let a watch face read another app's data.
 
-**Target:** Amazfit Active 2 **Round**: 466×466, Zepp OS 4.x, API level 3.0+. It won't fit the Active 2 *Square* (390×450) without a new layout.
+**Targets:**
+- **Amazfit Active 2 (Round)**, 466×466: the `app/` project.
+- **Amazfit Balance**, 480×480: the `app-balance/` project. It's the same face and the same code, with every image redrawn at 480 px.
+
+Neither fits the Active 2 *Square* (390×450) without a new layout.
 
 ---
 
@@ -53,6 +57,10 @@ cd rampart-watchface
 npm test            # logic + mocked-platform smoke tests
 npm run build       # -> app/dist/*.zab
 npm run package     # -> release/*.zip for amazfitwatchfaces.com (+ .zpk)
+
+# Amazfit Balance build
+npm run release:balance   # -> release/Rampart_GMT_Balance_v*.zip
+npm run preview:balance   # QR code to install on a Balance
 ```
 
 **On the simulator:** install the Zepp OS Simulator from the Zepp developer site, choose the Active 2 (Round), and run `npm run dev`.
@@ -69,6 +77,8 @@ Everything visual is generated from code in `tools/`. No fonts or third-party im
 pip install -r requirements.txt
 npm run assets      # rebuilds every PNG, app/watchface/layout.js, previews and icon
 ```
+
+After changing anything in `app/`, run `npm run balance` to regenerate `app-balance/`. It copies the code over, redraws the images at 480 px, and renders `docs/balance/preview.gif` for the Balance listing; a test fails if the two drift apart.
 
 `tools/layout.py` is the single source of truth for positions. The generator bakes the static parts into `bg.png` and writes the same numbers to `app/watchface/layout.js`, so the live digits always land on their ghost segments.
 
